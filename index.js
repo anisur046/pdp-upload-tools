@@ -18,14 +18,14 @@ const DEFAULT_CONFIG = {
 // Fallback Web Form Selectors (Matches mock form + eGramSwaraj potential forms)
 const SELECTORS = {
   theme: ['select#theme', 'select[name="themeId"]', 'select[name="theme"]', 'select[id*="theme"]'],
-  activity: ['select#activity', 'select[name="activityId"]', 'select[name="activity"]', 'select[id*="activity"]'],
-  focus_area: ['select#focus_area', 'select[name="focusAreaId"]', 'select[name="focusArea"]', 'select[id*="focusArea"]', 'select[id*="focus_area"]'],
-  activity_type: ['select#activity_type', 'select[name="activityType"]', 'select[id*="activityType"]', 'select[id*="activity_type"]'],
-  activity_nature: ['select#activity_nature', 'select[name="activityNature"]', 'select[id*="activityNature"]', 'select[id*="activity_nature"]'],
+  activity: ['select#activity', 'select[name="activityId"]', 'select[name="activityCode"]', 'select[name="activity"]', 'select[id*="activity"]'],
+  focus_area: ['select#focus_area', 'select[name="focusAreaId"]', 'select[name="focusAreaCode"]', 'select[name="focusArea"]', 'select[id*="focusArea"]', 'select[id*="focus_area"]'],
+  activity_type: ['select#activity_type', 'select[name="activityType"]', 'select[name="activityTypeCode"]', 'select[name="activityTypeId"]', 'select[id*="activityType"]', 'select[id*="activity_type"]'],
+  activity_nature: ['select#activity_nature', 'select[name="activityNature"]', 'select[name="natureOfActivity"]', 'select[name="activityNatureId"]', 'select[id*="natureOfActivity"]', 'select[id*="activityNature"]', 'select[id*="activity_nature"]'],
   description: ['textarea#description', 'textarea[name="activityDescription"]', 'textarea[name="description"]', 'textarea[id*="description"]'],
   indicators: ['select#indicators', 'select[name="indicators"]', 'select[name="indicatorId"]', 'select[id*="indicator"]'],
   remarks_for: ['select#remarks_for', 'select[name="remarksFor"]', 'select[name="remarks_for"]', 'select[id*="remarks"]'],
-  targeted_population: ['select#targeted_population', 'select[name="targetedPopulation"]', 'select[name="targeted_population"]', 'select[id*="target"]'],
+  targeted_population: ['select#targeted_population', 'select[name="targetedPopulation"]', 'select[name="targetedPopulace"]', 'select[name="targeted_population"]', 'select[id*="target"]', 'select[id*="populace"]'],
   funded_by_panchayat: ['input[type="radio"][name="funded_by_panchayat"]', 'input[type="radio"][name="directlyFunded"]', 'input[type="radio"][name="isFunded"]'],
   completion_year: ['input#completion_year', 'input[name="completionYear"]', 'input[name="estimatedCompletionYear"]', 'input[id*="completion_year"]', 'input[placeholder="Year"]'],
   completion_month: ['input#completion_month', 'input[name="completionMonth"]', 'input[name="estimatedCompletionMonth"]', 'input[id*="completion_month"]', 'input[placeholder="Month"]'],
@@ -39,16 +39,45 @@ const SELECTORS = {
 };
 
 /**
- * Loads config.json if it exists, otherwise creates one with default values
+ * Finds the Chrome executable path by checking common Windows install directories
+ */
+function findChromePath() {
+  const standardPaths = [
+    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe"
+  ];
+  if (process.env.LOCALAPPDATA) {
+    standardPaths.push(path.join(process.env.LOCALAPPDATA, 'Google', 'Chrome', 'Application', 'chrome.exe'));
+  }
+  for (const p of standardPaths) {
+    if (fs.existsSync(p)) {
+      return p;
+    }
+  }
+  return DEFAULT_CONFIG.chromePath;
+}
+
+/**
+ * Loads config.json if it exists, otherwise creates one with default values.
+ * Re-creates config.json if it is empty or corrupted.
  */
 function loadConfig() {
   const configPath = path.join(process.cwd(), 'config.json');
   if (fs.existsSync(configPath)) {
     try {
-      const userConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      const content = fs.readFileSync(configPath, 'utf8').trim();
+      if (!content) {
+        throw new Error('Config file is empty');
+      }
+      const userConfig = JSON.parse(content);
       return { ...DEFAULT_CONFIG, ...userConfig };
     } catch (e) {
-      console.log(pc.red(`❌ Error reading config.json: ${e.message}. Using default settings.`));
+      console.log(pc.red(`❌ Error reading config.json: ${e.message}. Re-creating default settings.`));
+      try {
+        fs.writeFileSync(configPath, JSON.stringify(DEFAULT_CONFIG, null, 2), 'utf8');
+      } catch (writeErr) {
+        // ignore
+      }
     }
   } else {
     try {
@@ -59,6 +88,191 @@ function loadConfig() {
     }
   }
   return DEFAULT_CONFIG;
+}
+
+/**
+ * Searches for Excel file in multiple directories (CWD, Desktop, OneDrive Desktop)
+ */
+function findExcelFile(fileName) {
+  const os = require('os');
+  const pathsToCheck = [
+    path.join(process.cwd(), fileName),
+    path.join(os.homedir(), 'Desktop', fileName),
+    path.join(os.homedir(), 'OneDrive', 'Desktop', fileName)
+  ];
+  for (const p of pathsToCheck) {
+    if (fs.existsSync(p)) {
+      return p;
+    }
+  }
+  return null;
+}
+
+/**
+ * Checks if a TCP port is active (listening)
+ */
+function checkPortActive(port) {
+  return new Promise((resolve) => {
+    const net = require('net');
+    const socket = new net.Socket();
+    socket.setTimeout(300);
+    socket.once('connect', () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.once('error', () => {
+      resolve(false);
+    });
+    socket.once('timeout', () => {
+      resolve(false);
+    });
+    socket.connect(port, '127.0.0.1');
+  });
+}
+
+/**
+ * Spawns a browser process in remote debugging mode and waits for it to listen
+ */
+function spawnBrowser(executablePath, profileDir) {
+  return new Promise((resolve) => {
+    const { spawn } = require('child_process');
+    const child = spawn(executablePath, [
+      '--remote-debugging-port=9222',
+      `--user-data-dir=${profileDir}`,
+      '--no-first-run'
+    ], {
+      detached: true,
+      stdio: 'ignore'
+    });
+    child.unref();
+
+    let attempts = 0;
+    const interval = setInterval(async () => {
+      attempts++;
+      const inUse = await checkPortActive(9222);
+      if (inUse) {
+        clearInterval(interval);
+        resolve(true);
+      } else if (attempts >= 10) {
+        clearInterval(interval);
+        resolve(false);
+      }
+    }, 1000);
+  });
+}
+
+/**
+ * Fetches the browser WebSocket debugger URL from local debugger JSON endpoint using
+ * low-level Node.js http API to bypass global proxy/experimental fetch issues.
+ */
+function getWSEndpoint(browserURL) {
+  return new Promise((resolve, reject) => {
+    const http = require('http');
+    const url = new URL(browserURL + '/json/version');
+    
+    const options = {
+      hostname: url.hostname,
+      port: url.port,
+      path: url.pathname,
+      method: 'GET',
+      headers: {
+        'host': `127.0.0.1:${url.port}`
+      },
+      agent: false
+    };
+
+    const req = http.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          if (json.webSocketDebuggerUrl) {
+            resolve(json.webSocketDebuggerUrl);
+          } else {
+            reject(new Error('webSocketDebuggerUrl not found in response'));
+          }
+        } catch (e) {
+          reject(new Error(`Failed to parse json: ${e.message}`));
+        }
+      });
+    });
+
+    req.on('error', (err) => {
+      reject(err);
+    });
+
+    req.setTimeout(2000, () => {
+      req.destroy();
+      reject(new Error('Request timed out'));
+    });
+
+    req.end();
+  });
+}
+
+/**
+ * Launches Chrome or Microsoft Edge in debugging mode
+ */
+async function launchBrowser(config) {
+  let browserURL = 'http://127.0.0.1:9222';
+  let browserInstance = null;
+  const os = require('os');
+
+  const connectWithWS = async () => {
+    const wsEndpoint = await getWSEndpoint(browserURL);
+    return await puppeteer.connect({
+      browserWSEndpoint: wsEndpoint,
+      defaultViewport: null
+    });
+  };
+
+  // 1. Try to connect to an already active debugging browser on port 9222
+  try {
+    browserInstance = await connectWithWS();
+    console.log(pc.green('✔ Connected to active browser debugging session on port 9222.'));
+    return browserInstance;
+  } catch (e) {
+    // Debugging port is closed
+  }
+
+  // 2. Try to launch Chrome in debugging mode
+  const chromePath = findChromePath();
+  if (fs.existsSync(chromePath)) {
+    console.log(pc.blue('Attempting to launch Google Chrome in debugging mode...'));
+    try {
+      const userProfileDir = path.join(os.homedir(), '.pdp-chrome-profile');
+      const success = await spawnBrowser(chromePath, userProfileDir);
+      if (success) {
+        browserInstance = await connectWithWS();
+        console.log(pc.green('✔ Connected to Google Chrome.'));
+        return browserInstance;
+      }
+    } catch (err) {
+      console.log(pc.yellow(`⚠️ Chrome launch failed: ${err.message}`));
+    }
+  }
+
+  // 3. Try to launch Microsoft Edge in debugging mode (Fallback)
+  const edgePath = "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
+  if (fs.existsSync(edgePath)) {
+    console.log(pc.blue('Attempting to launch Microsoft Edge in debugging mode (fallback)...'));
+    try {
+      const userProfileDir = path.join(os.homedir(), '.pdp-edge-profile');
+      const success = await spawnBrowser(edgePath, userProfileDir);
+      if (success) {
+        browserInstance = await connectWithWS();
+        console.log(pc.green('✔ Connected to Microsoft Edge.'));
+        return browserInstance;
+      }
+    } catch (err) {
+      console.log(pc.red(`❌ Edge launch failed: ${err.message}`));
+    }
+  }
+
+  throw new Error('Could not launch Google Chrome or Microsoft Edge in remote debugging mode. Please close all active browser windows and try running the tool again.');
 }
 
 /**
@@ -209,37 +423,64 @@ async function selectDropdown(page, selectorList, text, delayMs, labelName) {
   if (!text) return;
   const selector = await findSelector(page, selectorList);
   if (!selector) {
-    console.log(pc.yellow(`⚠️ Dropdown not found for: ${labelName} (Checked: ${selectorList.join(', ')})`));
+    console.log(pc.yellow(`⚠️ Dropdown not found for: ${labelName}`));
     return;
   }
 
-  const selectedValue = await page.evaluate((sel, txt) => {
-    const select = document.querySelector(sel);
-    if (!select) return null;
-    
-    const options = Array.from(select.options);
-    const cleanTxt = txt.toString().trim().toLowerCase();
-    
-    // Find option where text contains the Excel value, or matches exactly
-    const match = options.find(o => 
-      o.text.trim().toLowerCase().includes(cleanTxt) || 
-      o.value.trim().toLowerCase() === cleanTxt
-    );
+  // Wait for the dropdown to contain the desired option (up to 8 seconds)
+  let optionValue = null;
+  const maxWaitMs = 8000;
+  const startTime = Date.now();
 
-    if (match) {
-      select.value = match.value;
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-      return match.text;
+  while (Date.now() - startTime < maxWaitMs) {
+    optionValue = await page.evaluate((sel, txt) => {
+      const select = document.querySelector(sel);
+      if (!select) return null;
+      const options = Array.from(select.options);
+      
+      const normalize = (s) => s ? s.toString().toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+      const cleanSearch = normalize(txt);
+      if (!cleanSearch) return null;
+
+      const match = options.find(o => {
+        const cleanOptText = normalize(o.text);
+        const cleanOptVal = normalize(o.value);
+        return cleanOptText.includes(cleanSearch) || 
+               cleanSearch.includes(cleanOptText) || 
+               cleanOptVal === cleanSearch;
+      });
+      return match ? match.value : null;
+    }, selector, text);
+
+    if (optionValue) {
+      break;
     }
-    return null;
-  }, selector, text);
-
-  if (!selectedValue) {
-    console.log(pc.red(`❌ Option "${text}" not found in dropdown for: ${labelName}`));
-  } else {
-    // Wait for cascading dropdown animations/API loads
-    await new Promise(r => setTimeout(r, delayMs));
+    // Desired option not loaded yet, wait 300ms and check again
+    await new Promise(r => setTimeout(r, 300));
   }
+
+  if (!optionValue) {
+    console.log(pc.red(`❌ Option "${text}" not found in dropdown for: ${labelName} (timed out waiting for options to load)`));
+    return;
+  }
+
+  // Select the option natively in Puppeteer/browser frame context
+  try {
+    await page.select(selector, optionValue);
+    // Force extra events to trigger any dynamic page updates
+    await page.evaluate((sel) => {
+      const el = document.querySelector(sel);
+      if (el) {
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        el.dispatchEvent(new Event('blur', { bubbles: true }));
+      }
+    }, selector);
+  } catch (err) {
+    console.log(pc.red(`❌ Failed to select "${text}" in dropdown for ${labelName}: ${err.message}`));
+  }
+
+  // Wait for dynamic options or loaders to settle
+  await new Promise(r => setTimeout(r, delayMs));
 }
 
 /**
@@ -319,21 +560,22 @@ async function run() {
   console.log(pc.cyan('==================================================\n'));
 
   const config = loadConfig();
-  const excelFilePath = path.join(process.cwd(), config.excelFile);
+  const excelFilePath = findExcelFile(config.excelFile);
 
   // Check Excel File Presence
-  if (!fs.existsSync(excelFilePath)) {
-    console.log(pc.yellow(`Excel file "${config.excelFile}" not found in current directory.`));
+  if (!excelFilePath) {
+    const desktopPath = path.join(require('os').homedir(), 'Desktop', config.excelFile);
+    console.log(pc.yellow(`Excel file "${config.excelFile}" not found.`));
     const response = await prompts({
       type: 'confirm',
       name: 'generate',
-      message: 'Would you like to generate a sample Excel template?',
+      message: `Would you like to generate a sample Excel template on your Desktop ("${desktopPath}")?`,
       initial: true
     });
 
     if (response.generate) {
-      await generateTemplate(excelFilePath);
-      console.log(pc.green(`\n✔ Generated sample Excel: "${config.excelFile}"`));
+      await generateTemplate(desktopPath);
+      console.log(pc.green(`\n✔ Generated sample Excel: "${desktopPath}"`));
       console.log(pc.cyan(`Please populate your data in this sheet and rerun the tool.\n`));
     } else {
       console.log(pc.red('Please create an Excel sheet with activity data to proceed. Exiting.'));
@@ -343,7 +585,7 @@ async function run() {
 
   // Read Excel File
   const workbook = new ExcelJS.Workbook();
-  console.log(pc.blue(`Reading "${config.excelFile}"...`));
+  console.log(pc.blue(`Reading "${path.basename(excelFilePath)}"...`));
   await workbook.xlsx.readFile(excelFilePath);
   const sheet = workbook.worksheets[0];
 
@@ -397,124 +639,44 @@ async function run() {
   // Choose launch/attach mode
   let page;
 
-  if (config.mode === 'attach') {
-    console.log('\n--------------------------------------------------');
-    console.log(pc.bold(pc.yellow('Connection Mode: ATTACH TO RUNNING CHROME')));
-    console.log('Instructions:');
-    console.log('1. Close all active Google Chrome windows completely.');
-    console.log('2. Open Chrome using the command prompt or terminal with debugging:');
-    console.log(pc.cyan(`   chrome.exe --remote-debugging-port=9222 --user-data-dir="C:\\chrome-profile"`));
-    console.log('3. In that debugging Chrome window, log in and open the GPDP Activity Form.');
-    console.log('--------------------------------------------------\n');
+  console.log(pc.blue('Detecting browser session...'));
+  try {
+    browser = await launchBrowser(config);
+  } catch (err) {
+    console.log(pc.red(`\n❌ Browser Error: ${err.message}`));
+    return;
+  }
 
-    const connectPrompt = await prompts({
-      type: 'text',
-      name: 'url',
-      message: 'Enter testing URL or press [Enter] to scan open Chrome tabs:',
-      initial: ''
-    });
-
-      browser = await puppeteer.connect({
-        browserURL: 'http://localhost:9222',
-        defaultViewport: null
-      });
-
-      const pages = await browser.pages();
-      
-      // Filter pages safely (skip system target pages and background services that throw errors)
-      let activePages = [];
-      for (const p of pages) {
-        try {
-          const url = p.url();
-          if (url && !url.startsWith('chrome://') && !url.startsWith('chrome-extension://')) {
-            activePages.push(p);
-          }
-        } catch (e) {
-          // ignore closed or system targets
-        }
-      }
-
-      if (activePages.length === 0) {
-        page = pages[0] || await browser.newPage();
-      } else {
-        if (connectPrompt.url) {
-          const cleanUrl = connectPrompt.url.trim().toLowerCase();
-          page = activePages.find(p => {
-            try {
-              return p.url().toLowerCase().includes(cleanUrl);
-            } catch (e) {
-              return false;
-            }
-          });
-        } else {
-          page = activePages.find(p => {
-            try {
-              const url = p.url().toLowerCase();
-              return url.includes('egramswaraj') || url.includes('mock') || url.includes('.html');
-            } catch (e) {
-              return false;
-            }
-          });
-        }
-        if (!page) {
-          page = activePages[0];
-        }
-      }
-
-      let pageTitle = 'Unknown Tab';
-      let pageUrl = 'Unknown URL';
-      try {
-        pageTitle = await page.title();
-        pageUrl = page.url();
-      } catch (err) {
-        // ignore title/url errors
-      }
-
-      console.log(pc.green(`✔ Connected successfully to page: ${pageTitle} (${pageUrl})`));
-  } else {
-    console.log('\n--------------------------------------------------');
-    console.log(pc.bold(pc.yellow('Connection Mode: LAUNCH NEW CHROME')));
-    console.log('--------------------------------------------------\n');
-
+  const pages = await browser.pages();
+  let activePages = [];
+  for (const p of pages) {
     try {
-      browser = await puppeteer.launch({
-        executablePath: config.chromePath,
-        headless: false,
-        defaultViewport: null,
-        args: ['--start-maximized']
-      });
-      const pages = await browser.pages();
-      page = pages[0] || await browser.newPage();
-
-      // Ask for target URL or use mock
-      const targetResponse = await prompts({
-        type: 'text',
-        name: 'url',
-        message: 'Enter GPDP Form URL (leave blank to test local mock form):',
-        initial: ''
-      });
-
-      let targetUrl = targetResponse.url;
-      if (!targetUrl) {
-        const localMockPath = path.join(process.cwd(), 'mock_form', 'index.html');
-        if (fs.existsSync(localMockPath)) {
-          targetUrl = `file://${localMockPath}`;
-        } else {
-          console.log(pc.red('❌ Local mock form not found and no URL entered. Exiting.'));
-          await browser.close();
-          return;
-        }
+      const url = p.url();
+      if (url && !url.startsWith('chrome://') && !url.startsWith('chrome-extension://') && !url.startsWith('edge://')) {
+        activePages.push(p);
       }
+    } catch (e) {}
+  }
 
-      console.log(pc.blue(`Navigating to: ${targetUrl}...`));
-      await page.goto(targetUrl, { waitUntil: 'networkidle2' });
-      console.log(pc.green(`✔ Form loaded.`));
-
+  const targetUrl = 'https://egramswaraj.gov.in/addactivity.htm';
+  page = activePages.find(p => {
+    try {
+      return p.url().toLowerCase().includes('egramswaraj.gov.in');
     } catch (e) {
-      console.log(pc.red(`❌ Launch failed: ${e.message}`));
-      console.log(pc.yellow(`Make sure the chromePath in config.json is correct: "${config.chromePath}"`));
-      return;
+      return false;
     }
+  });
+
+  if (!page) {
+    page = activePages[0] || await browser.newPage();
+    console.log(pc.blue(`Navigating to: ${targetUrl}...`));
+    try {
+      await page.goto(targetUrl, { waitUntil: 'load' });
+    } catch (gotoErr) {
+      console.log(pc.yellow(`⚠️ Navigation took too long or failed: ${gotoErr.message}`));
+    }
+  } else {
+    console.log(pc.green(`✔ Found active eGramSwaraj portal tab.`));
   }
 
   // Loop through rows
@@ -535,27 +697,50 @@ async function run() {
     console.log(`${pc.bold('Cost:')} Rs. ${act.estimated_cost || 0}`);
     console.log(pc.cyan('--------------------------------------------------\n'));
 
-    // Dynamic context helper (resolves forms inside iframes/framesets)
+    // Dynamic context helper & form visibility polling loop (waits automatically until form is found)
     let context = page;
-    try {
-      const frames = page.frames();
-      for (const frame of frames) {
-        try {
-          const hasTheme = await frame.$('select[name="themeId"], select#theme, select[name="theme"], select[id*="theme"]');
-          if (hasTheme) {
-            context = frame;
-            break;
+    let hasForm = false;
+    let printedWaiting = false;
+
+    while (!hasForm) {
+      try {
+        // Resolve frame context in case form is inside an iframe
+        context = page;
+        const frames = page.frames();
+        for (const frame of frames) {
+          try {
+            const hasTheme = await frame.$('select[name="themeId"], select#theme, select[name="theme"], select[id*="theme"]');
+            if (hasTheme) {
+              context = frame;
+              break;
+            }
+          } catch (e) {
+            // ignore cross-origin access blocks
           }
-        } catch (e) {
-          // ignore cross-origin access blocks
         }
+
+        const themeSelector = await findSelector(context, SELECTORS.theme);
+        if (themeSelector) {
+          hasForm = true;
+          break;
+        }
+      } catch (e) {
+        // page might be closed or navigating
       }
-    } catch (e) {
-      // ignore frame check errors
+
+      if (!printedWaiting) {
+        console.log(pc.yellow(`⏳ Waiting for GPDP Activity Form to open on: ${targetUrl}`));
+        console.log(pc.cyan(`(Please log in if required and navigate to the form. Script will detect it automatically)`));
+        printedWaiting = true;
+      }
+
+      await new Promise(r => setTimeout(r, 1500));
     }
 
     if (context !== page) {
       console.log(pc.green(`✔ Form detected inside iframe context: ${context.url()}`));
+    } else {
+      console.log(pc.green(`✔ Form detected on page.`));
     }
 
     try {
