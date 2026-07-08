@@ -1,0 +1,31 @@
+{
+  "name": "pdp-upload-tools",
+  "version": "1.0.0",
+  "description": "Tools for uploading Product Detail Pages (PDP) / GPDP Activities from Excel sheets to web forms.",
+  "main": "index.js",
+  "bin": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js",
+    "build": "pkg . --targets node18-win-x64 --output dist/pdp-autofill.exe --public"
+  },
+  "keywords": [
+    "pdp",
+    "gpdp",
+    "egramswaraj",
+    "autofill",
+    "excel",
+    "puppeteer"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "picocolors": "^1.0.1",
+    "prompts": "^2.4.2",
+    "puppeteer-core": "^22.10.0"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
+  }
+}

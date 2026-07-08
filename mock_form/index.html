@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mock GPDP Activity Details Form</title>
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="form-container">
+    <header class="form-header">
+      <div class="search-bar">
+        <div class="search-field">
+          <label for="search_activity">Search by Activity Name</label>
+          <input type="text" id="search_activity" placeholder="Search by Activity Name">
+        </div>
+        <div class="search-field">
+          <label for="search_theme">Search by Theme</label>
+          <select id="search_theme">
+            <option value="">Select</option>
+          </select>
+        </div>
+        <div class="search-field">
+          <label for="search_focus">Search by Focus Area</label>
+          <select id="search_focus">
+            <option value="">Select</option>
+          </select>
+        </div>
+        <button type="button" class="btn-search">🔍 Search</button>
+      </div>
+    </header>
+
+    <main class="form-body">
+      <form id="gpdp_form" onsubmit="event.preventDefault(); alert('Form submitted successfully!');">
+        <!-- Activity Details Section -->
+        <section class="form-section">
+          <h2 class="section-title">Activity Details Section</h2>
+          <div class="section-content">
+            
+            <div class="form-group">
+              <label for="theme" class="required">Choose desired theme</label>
+              <select id="theme" name="theme" required>
+                <option value="">Select</option>
+                <option value="Theme 1 - Poverty Free and Enhanced Livelihoods Village">Theme 1 - Poverty Free and Enhanced Livelihoods Village</option>
+                <option value="Theme 2 - Healthy Village">Theme 2 - Healthy Village</option>
+                <option value="Theme 3 - Child Friendly Village">Theme 3 - Child Friendly Village</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="activity" class="required">Select an activity</label>
+              <select id="activity" name="activity" required>
+                <option value="">Select</option>
+                <option value="Facilitate formation of bank sakhi">Facilitate formation of bank sakhi</option>
+                <option value="Provide drinking water facilities">Provide drinking water facilities</option>
+                <option value="Construct village community hall">Construct village community hall</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="focus_area" class="required">Focus/Subject Area of Selected Activity</label>
+              <select id="focus_area" name="focus_area" required>
+                <option value="">Select</option>
+                <option value="Poverty alleviation programme">Poverty alleviation programme</option>
+                <option value="Drinking Water">Drinking Water</option>
+                <option value="Social Forestry">Social Forestry</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="activity_type" class="required">Activity Type</label>
+              <select id="activity_type" name="activity_type" required>
+                <option value="">Select</option>
+                <option value="Community Works">Community Works</option>
+                <option value="Individual Works">Individual Works</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="activity_nature" class="required">Select activity nature</label>
+              <select id="activity_nature" name="activity_nature" required>
+                <option value="">Select</option>
+                <option value="New Asset">New Asset</option>
+                <option value="Maintenance / Upgradation">Maintenance / Upgradation</option>
+              </select>
+            </div>
+
+            <div class="form-group full-width">
+              <label for="description" class="required">Enter brief description about Activity</label>
+              <div class="textarea-wrapper">
+                <textarea id="description" name="description" rows="3" maxlength="500" required placeholder="Enter description..."></textarea>
+                <span class="char-counter" id="char_counter">500 remaining</span>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="indicators" class="required">Select Panchayat Advancement Index Indicators</label>
+              <select id="indicators" name="indicators" required>
+                <option value="">Select</option>
+                <option value="Percentage of households with bank accounts">Percentage of households with bank accounts</option>
+                <option value="Percentage of households with tap water">Percentage of households with tap water</option>
+              </select>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- Beneficiary Details Section -->
+        <section class="form-section">
+          <h2 class="section-title">Beneficiary Details Section</h2>
+          <div class="section-content">
+            
+            <div class="form-group">
+              <label for="remarks_for" class="required">Activity is remarkably for?</label>
+              <select id="remarks_for" name="remarks_for" required>
+                <option value="">Select</option>
+                <option value="Women">Women</option>
+                <option value="Children">Children</option>
+                <option value="General Public">General Public</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="targeted_population" class="required">Select targeted population</label>
+              <select id="targeted_population" name="targeted_population" required>
+                <option value="">Select</option>
+                <option value="SC and ST">SC and ST</option>
+                <option value="Marginalized Groups">Marginalized Groups</option>
+                <option value="All Villagers">All Villagers</option>
+              </select>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- Funding & Timeline Details -->
+        <section class="form-section">
+          <h2 class="section-title">Funding & Timeline Details</h2>
+          <div class="section-content">
+            
+            <div class="form-group full-width radio-group-container">
+              <span class="label required">Is this Activity directly funded by Panchayat?</span>
+              <div class="radio-options">
+                <label><input type="radio" name="funded_by_panchayat" value="No" required> No</label>
+                <label><input type="radio" name="funded_by_panchayat" value="Yes" required checked> Yes</label>
+              </div>
+            </div>
+
+            <div class="form-group full-width timeline-inputs">
+              <span class="label required">Estimated completion time of Activity</span>
+              <div class="input-row">
+                <input type="number" id="completion_year" name="completion_year" placeholder="Year" min="0" required>
+                <input type="number" id="completion_month" name="completion_month" placeholder="Month" min="0" max="11" required>
+                <input type="number" id="completion_days" name="completion_days" placeholder="Days" min="0" max="30" required>
+              </div>
+            </div>
+
+            <div class="form-group start-date">
+              <label class="required">Select tentative start Year and Month of the Activity</label>
+              <div class="select-row">
+                <select id="start_year" name="start_year" required>
+                  <option value="">Select Year</option>
+                  <option value="2026-2027">2026-2027</option>
+                  <option value="2027-2028">2027-2028</option>
+                </select>
+                <select id="start_month" name="start_month" required>
+                  <option value="">Select Month</option>
+                  <option value="April">April</option>
+                  <option value="May">May</option>
+                  <option value="June">June</option>
+                  <option value="July">July</option>
+                  <option value="August">August</option>
+                  <option value="September">September</option>
+                  <option value="October">October</option>
+                  <option value="November">November</option>
+                  <option value="December">December</option>
+                  <option value="January">January</option>
+                  <option value="February">February</option>
+                  <option value="March">March</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group full-width beneficiary-counts">
+              <span class="label required">Expected Beneficiaries</span>
+              <div class="input-row calc-row">
+                <div class="calc-input">
+                  <label for="beneficiaries_general">General</label>
+                  <input type="number" id="beneficiaries_general" name="beneficiaries_general" min="0" value="0" required>
+                </div>
+                <span class="operator">+</span>
+                <div class="calc-input">
+                  <label for="beneficiaries_sc">SC</label>
+                  <input type="number" id="beneficiaries_sc" name="beneficiaries_sc" min="0" value="0" required>
+                </div>
+                <span class="operator">+</span>
+                <div class="calc-input">
+                  <label for="beneficiaries_st">ST</label>
+                  <input type="number" id="beneficiaries_st" name="beneficiaries_st" min="0" value="0" required>
+                </div>
+                <span class="operator">=</span>
+                <div class="calc-input">
+                  <label for="beneficiaries_total">Total</label>
+                  <input type="number" id="beneficiaries_total" name="beneficiaries_total" readonly value="0">
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group full-width">
+              <label for="estimated_cost" class="required">Estimated Total Cost (In Rupees)</label>
+              <input type="number" id="estimated_cost" name="estimated_cost" min="0" placeholder="0" required>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- Form Actions -->
+        <footer class="form-footer-actions">
+          <button type="submit" id="btn_save" class="btn btn-save">💾 Save</button>
+          <button type="button" id="btn_save_forward" class="btn btn-forward" onclick="alert('Form Saved and Forwarded!');">🔁 Save and Forward</button>
+          <button type="button" id="btn_close" class="btn btn-close" onclick="alert('Form Closed');">❌ Close</button>
+        </footer>
+      </form>
+    </main>
+  </div>
+
+  <script>
+    // Character counter logic
+    const descTextarea = document.getElementById('description');
+    const charCounter = document.getElementById('char_counter');
+    descTextarea.addEventListener('input', () => {
+      const remaining = 500 - descTextarea.value.length;
+      charCounter.textContent = `${remaining} remaining`;
+    });
+
+    // Auto-sum beneficiaries logic
+    const generalInput = document.getElementById('beneficiaries_general');
+    const scInput = document.getElementById('beneficiaries_sc');
+    const stInput = document.getElementById('beneficiaries_st');
+    const totalInput = document.getElementById('beneficiaries_total');
+
+    function calculateTotal() {
+      const g = parseInt(generalInput.value) || 0;
+      const sc = parseInt(scInput.value) || 0;
+      const st = parseInt(stInput.value) || 0;
+      totalInput.value = g + sc + st;
+    }
+
+    [generalInput, scInput, stInput].forEach(input => {
+      input.addEventListener('input', calculateTotal);
+      input.addEventListener('change', calculateTotal);
+    });
+  </script>
+</body>
+</html>
