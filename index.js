@@ -385,8 +385,7 @@ async function fillInput(page, selectorList, value, delayMs, labelName) {
   if (value === undefined || value === null || value === '') return;
   const selector = await findSelector(page, selectorList);
   if (!selector) {
-    console.log(pc.yellow(`⚠️ Field not found for: ${labelName} (Checked: ${selectorList.join(', ')})`));
-    return;
+    throw new Error(`Field not found for: ${labelName} (Checked: ${selectorList.join(', ')})`);
   }
 
   // Clear and prepare field
@@ -423,8 +422,7 @@ async function selectDropdown(page, selectorList, text, delayMs, labelName) {
   if (!text) return;
   const selector = await findSelector(page, selectorList);
   if (!selector) {
-    console.log(pc.yellow(`⚠️ Dropdown not found for: ${labelName}`));
-    return;
+    throw new Error(`Dropdown not found for: ${labelName} (Checked: ${selectorList.join(', ')})`);
   }
 
   // Wait for the dropdown to contain the desired option (up to 8 seconds)
@@ -438,18 +436,70 @@ async function selectDropdown(page, selectorList, text, delayMs, labelName) {
       if (!select) return null;
       const options = Array.from(select.options);
       
-      const normalize = (s) => s ? s.toString().toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+      const normalize = (s) => {
+        if (!s) return '';
+        return s.toString()
+          .toLowerCase()
+          .replace(/&/g, 'and')
+          .replace(/[^a-z0-9]/g, '');
+      };
+
       const cleanSearch = normalize(txt);
       if (!cleanSearch) return null;
 
-      const match = options.find(o => {
+      // Tier 1: Try exact normalized match
+      let match = options.find(o => normalize(o.text) === cleanSearch || normalize(o.value) === cleanSearch);
+      if (match) return match.value;
+
+      // Tier 2: Try substring normalized match
+      match = options.find(o => {
         const cleanOptText = normalize(o.text);
-        const cleanOptVal = normalize(o.value);
-        return cleanOptText.includes(cleanSearch) || 
-               cleanSearch.includes(cleanOptText) || 
-               cleanOptVal === cleanSearch;
+        return cleanOptText.includes(cleanSearch) || cleanSearch.includes(cleanOptText);
       });
-      return match ? match.value : null;
+      if (match) return match.value;
+
+      // Tier 3: Token-based overlap similarity (fuzzy)
+      const tokenize = (s) => {
+        if (!s) return [];
+        return s.toString()
+          .toLowerCase()
+          .replace(/&/g, 'and')
+          .replace(/[^a-z0-9]/g, ' ')
+          .split(/\s+/)
+          .filter(Boolean);
+      };
+
+      const searchTokens = tokenize(txt);
+      const searchSet = new Set(searchTokens);
+      if (searchSet.size === 0) return null;
+
+      let bestMatch = null;
+      let highestScore = 0;
+
+      for (const o of options) {
+        const optTokens = tokenize(o.text);
+        const optSet = new Set(optTokens);
+        if (optSet.size === 0) continue;
+
+        let intersection = 0;
+        for (const t of searchSet) {
+          if (optSet.has(t)) {
+            intersection++;
+          }
+        }
+
+        const unionSize = searchSet.size + optSet.size - intersection;
+        const jaccard = unionSize > 0 ? intersection / unionSize : 0;
+        const coverage = intersection / searchSet.size;
+        const score = (jaccard * 0.4) + (coverage * 0.6);
+
+        if (score > highestScore && score >= 0.70) {
+          highestScore = score;
+          bestMatch = o;
+        }
+      }
+
+      return bestMatch ? bestMatch.value : null;
     }, selector, text);
 
     if (optionValue) {
@@ -460,8 +510,23 @@ async function selectDropdown(page, selectorList, text, delayMs, labelName) {
   }
 
   if (!optionValue) {
-    console.log(pc.red(`❌ Option "${text}" not found in dropdown for: ${labelName} (timed out waiting for options to load)`));
-    return;
+    let availableText = '';
+    try {
+      const availableOptions = await page.evaluate((sel) => {
+        const select = document.querySelector(sel);
+        if (!select) return [];
+        return Array.from(select.options).map(o => o.text.trim()).filter(Boolean);
+      }, selector);
+      if (availableOptions.length > 0) {
+        availableText = `\n   Available options in "${labelName}" dropdown:\n` + 
+          availableOptions.map(opt => `     - "${opt}"`).join('\n');
+      } else {
+        availableText = `\n   The "${labelName}" dropdown is currently empty.`;
+      }
+    } catch (e) {
+      availableText = `\n   Could not retrieve available options: ${e.message}`;
+    }
+    throw new Error(`Option "${text}" not found in dropdown for: ${labelName} (timed out waiting for options to load).${availableText}`);
   }
 
   // Select the option natively in Puppeteer/browser frame context
@@ -476,7 +541,7 @@ async function selectDropdown(page, selectorList, text, delayMs, labelName) {
       }
     }, selector);
   } catch (err) {
-    console.log(pc.red(`❌ Failed to select "${text}" in dropdown for ${labelName}: ${err.message}`));
+    throw new Error(`Failed to select "${text}" in dropdown for ${labelName}: ${err.message}`);
   }
 
   // Wait for dynamic options or loaders to settle
@@ -490,8 +555,7 @@ async function selectRadio(page, selectorList, value, delayMs, labelName) {
   if (value === undefined || value === null || value === '') return;
   const selector = await findSelector(page, selectorList);
   if (!selector) {
-    console.log(pc.yellow(`⚠️ Radio buttons not found for: ${labelName}`));
-    return;
+    throw new Error(`Radio buttons not found for: ${labelName} (Checked: ${selectorList.join(', ')})`);
   }
 
   const nameAttr = await page.evaluate((sel) => {
@@ -499,7 +563,9 @@ async function selectRadio(page, selectorList, value, delayMs, labelName) {
     return el ? el.getAttribute('name') : null;
   }, selector);
 
-  if (!nameAttr) return;
+  if (!nameAttr) {
+    throw new Error(`Could not read name attribute of radio buttons for: ${labelName}`);
+  }
 
   const clicked = await page.evaluate((name, val) => {
     const radios = Array.from(document.querySelectorAll(`input[type="radio"][name="${name}"]`));
@@ -520,7 +586,7 @@ async function selectRadio(page, selectorList, value, delayMs, labelName) {
   }, nameAttr, value);
 
   if (!clicked) {
-    console.log(pc.yellow(`⚠️ Radio option "${value}" not found for: ${labelName}`));
+    throw new Error(`Radio option "${value}" not found for: ${labelName}`);
   } else {
     await new Promise(r => setTimeout(r, delayMs));
   }
@@ -589,13 +655,26 @@ async function run() {
   await workbook.xlsx.readFile(excelFilePath);
   const sheet = workbook.worksheets[0];
 
+  // Parse headers to map columns dynamically
+  const headerRow = sheet.getRow(config.startRow - 1 || 1);
+  const colMap = {};
+  headerRow.eachCell((cell, colNum) => {
+    const val = cell.value ? cell.value.toString().trim().toLowerCase().replace(/[^a-z0-9]/g, '_') : '';
+    if (val) {
+      colMap[val] = colNum;
+    }
+  });
+
+  const uploadStatusCol = colMap['upload_status'] || 20;
+
   // Map rows
   const activities = [];
   sheet.eachRow((row, rowNumber) => {
     if (rowNumber < config.startRow) return;
 
     // Build data object matching cells
-    const getVal = (colNum) => {
+    const getValByName = (name, defaultCol) => {
+      const colNum = colMap[name] || defaultCol;
       const cell = row.getCell(colNum);
       if (cell.value && typeof cell.value === 'object' && cell.value.result !== undefined) {
         return cell.value.result;
@@ -606,26 +685,26 @@ async function run() {
     activities.push({
       rowNum: rowNumber,
       rowObj: row,
-      theme: getVal(1),
-      activity: getVal(2),
-      focus_area: getVal(3),
-      activity_type: getVal(4),
-      activity_nature: getVal(5),
-      description: getVal(6),
-      indicators: getVal(7),
-      remarks_for: getVal(8),
-      targeted_population: getVal(9),
-      funded_by_panchayat: getVal(10),
-      completion_year: getVal(11),
-      completion_month: getVal(12),
-      completion_days: getVal(13),
-      start_year: getVal(14),
-      start_month: getVal(15),
-      beneficiaries_general: getVal(16),
-      beneficiaries_sc: getVal(17),
-      beneficiaries_st: getVal(18),
-      estimated_cost: getVal(19),
-      upload_status: getVal(20)
+      theme: getValByName('theme', 1),
+      activity: getValByName('activity', 2),
+      focus_area: getValByName('focus_area', 3),
+      activity_type: getValByName('activity_type', 4),
+      activity_nature: getValByName('activity_nature', 5),
+      description: getValByName('description', 6),
+      indicators: getValByName('indicators', 7),
+      remarks_for: getValByName('remarks_for', 8),
+      targeted_population: getValByName('targeted_population', 9),
+      funded_by_panchayat: getValByName('funded_by_panchayat', 10),
+      completion_year: getValByName('completion_year', 11),
+      completion_month: getValByName('completion_month', 12),
+      completion_days: getValByName('completion_days', 13),
+      start_year: getValByName('start_year', 14),
+      start_month: getValByName('start_month', 15),
+      beneficiaries_general: getValByName('beneficiaries_general', 16),
+      beneficiaries_sc: getValByName('beneficiaries_sc', 17),
+      beneficiaries_st: getValByName('beneficiaries_st', 18),
+      estimated_cost: getValByName('estimated_cost', 19),
+      upload_status: getValByName('upload_status', 20)
     });
   });
 
@@ -804,7 +883,7 @@ async function run() {
           console.log(pc.green('✔ Save clicked.'));
           
           // Write success status
-          act.rowObj.getCell(20).value = 'SUCCESS - ' + new Date().toLocaleString();
+          act.rowObj.getCell(uploadStatusCol).value = 'SUCCESS - ' + new Date().toLocaleString();
           await saveWorkbook(workbook, excelFilePath);
         } else {
           console.log(pc.yellow('⚠️ Save button not found. Skipping auto-save.'));
@@ -824,7 +903,7 @@ async function run() {
 
         if (confirm.action === 'next') {
           // Write success status
-          act.rowObj.getCell(20).value = 'SUCCESS - ' + new Date().toLocaleString();
+          act.rowObj.getCell(uploadStatusCol).value = 'SUCCESS - ' + new Date().toLocaleString();
           await saveWorkbook(workbook, excelFilePath);
         } else if (confirm.action === 'retry') {
           i--; // decrement loop counter to repeat current index
@@ -853,7 +932,7 @@ async function run() {
         i--;
       } else if (errorAction.action === 'skip') {
         // Write skipped/error status
-        act.rowObj.getCell(20).value = 'SKIPPED - ' + err.message;
+        act.rowObj.getCell(uploadStatusCol).value = 'SKIPPED - ' + err.message;
         await saveWorkbook(workbook, excelFilePath);
       } else if (errorAction.action === 'exit') {
         break;
